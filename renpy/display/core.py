@@ -1870,6 +1870,9 @@ class Interface(object):
                 icon,
                 )
 
+            if isinstance(im, renpy.display.pgrender.HighDpiSurfaceProxy):
+                im = im.surface
+
             # Convert the aspect ratio to be square.
             iw, ih = im.get_size()
             imax = max(iw, ih)

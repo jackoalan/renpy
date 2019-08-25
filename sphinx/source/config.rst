@@ -493,6 +493,18 @@ Occasionally Used
     If true, the game will autosave. If false, no autosaving will
     occur.
 
+.. var:: config.hidpi_textures = False
+
+    If true, Ren'Py searches for images suffixed with '@nx' where 'n' is a
+    virtual scaling factor used for presenting the image with a higher DPI.
+
+    The factors searched are listed in :var:`config.hidpi_factors`.
+
+.. var:: config.hidpi_factors = [ 4, 3, 2 ]
+
+    When :var:`config.hidpi_textures` is true, the first matching factor
+    in this list is loaded in place of the base texture.
+
 .. var:: config.history_callbacks = [ ... ]
 
     This contains a list of callbacks that are called before Ren'Py adds

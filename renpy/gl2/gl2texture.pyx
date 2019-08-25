@@ -137,14 +137,14 @@ cdef class TextureLoader:
 
         return self.total_texture_size, len(self.allocated)
 
-    def load_one_surface(self, surf, bl, bt, br, bb):
+    def load_one_surface(self, surf, bl, bt, br, bb, hidpi_factor):
         """
         Converts a surface into a texture.
         """
 
         size = surf.get_size()
 
-        rv = Texture(size, self)
+        rv = Texture(size, hidpi_factor, self)
         rv.from_surface(surf)
 
         if bl or bt or br or bb:
@@ -159,7 +159,7 @@ cdef class TextureLoader:
             if (w and h):
 
                 mesh.add_texture_rectangle(
-                    0.0, 0.0, pw, ph,
+                    0.0, 0.0, pw / hidpi_factor, ph / hidpi_factor,
                     1.0 * bl / w, 1.0 * bt / h, 1.0 - 1.0 * br / w, 1.0 - 1.0 * bb / h)
 
             rv = Model((pw, ph), mesh, ("renpy.texture",), { "uTex0" : rv })
@@ -211,12 +211,17 @@ cdef class TextureLoader:
 
     def load_surface(self, surf):
         border = 1
+        hidpi_factor = 1
+
+        if isinstance(surf, renpy.display.pgrender.HighDpiSurfaceProxy):
+            hidpi_factor = surf.hidpi_factor
+            surf = surf.surface
 
         size = surf.get_size()
         w, h = size
 
         if (w <= self.max_texture_width) and (h <= self.max_texture_height):
-            return self.load_one_surface(surf, 0, 0, 0, 0)
+            return self.load_one_surface(surf, 0, 0, 0, 0, hidpi_factor)
 
         htiles = self.texture_axis(w, self.max_texture_width, border)
         vtiles = self.texture_axis(h, self.max_texture_height, border)
@@ -226,8 +231,8 @@ cdef class TextureLoader:
         for ty, th, bt, bb in vtiles:
             for tx, tw, bl, br in htiles:
                 ss = surf.subsurface((tx - bl, ty - bt, tw + bl + br, th + bt + bb))
-                t = self.load_one_surface(ss, bl, bt, br, bb)
-                rv.blit(t, (tx, ty))
+                t = self.load_one_surface(ss, bl, bt, br, bb, hidpi_factor)
+                rv.blit(t, (tx // hidpi_factor, ty // hidpi_factor))
 
         return rv
 
@@ -236,7 +241,7 @@ cdef class TextureLoader:
         Renders `what` to a texture.
         """
 
-        rv = Texture(what.get_size(), self)
+        rv = Texture(what.get_size(), 1, self)
         rv.from_render(what)
         return rv
 
@@ -577,7 +582,7 @@ class Texture(GLTexture, Model):
     represent it.
     """
 
-    def __init__(self, size, loader):
+    def __init__(self, size, hidpi_factor, loader):
 
         GLTexture.__init__(self, size, loader)
 
@@ -587,7 +592,7 @@ class Texture(GLTexture, Model):
         w, h = size
 
         mesh.add_texture_rectangle(
-            0.0, 0.0, w, h,
+            0.0, 0.0, w / hidpi_factor, h / hidpi_factor,
             0.0, 0.0, 1.0, 1.0,
             )
 
