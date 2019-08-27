@@ -141,27 +141,78 @@ safe_formats = { "png", "jpg", "jpeg", "webp" }
 # Lock used for loading unsafe formats.
 image_load_lock = threading.RLock()
 
+class HighDpiSurfaceProxy:
+    """
+    References a high resolution surface image replacing a lower resolution one.
+    """
+
+    def __init__(self, surface, hidpi_factor):
+        self.surface = surface
+        self.hidpi_factor = hidpi_factor
+
+    def get_size(self):
+        size = self.surface.get_size()
+        return [c // self.hidpi_factor for c in size]
+
+    def get_bounding_rect(self):
+        size = self.get_size()
+        return (0, 0, size[0], size[1])
+
+    def subsurface(self, bounds):
+        surf = self.surface.subsurface(bounds)
+        return HighDpiSurfaceProxy(surf, self.hidpi_factor)
 
 def load_image(f, filename):
     global count
 
     _basename, _dot, ext = filename.rpartition('.')
 
-    try:
+    surf = None
+    hidpi_factor = 1
 
-        if ext.lower() in safe_formats:
-            surf = pygame.image.load(f, renpy.exports.fsencode(filename))
-        else:
+    # Search for hidpi textures first
+    if renpy.config.hidpi_textures and renpy.display.draw and renpy.display.draw.info["renderer"] != "sw":
+        for factor in renpy.config.hidpi_factors:
+            highres_filename = _basename + '@{}x.'.format(factor) + ext
 
-            # Non-whitelisted formats may not be able to load in a reentrant
-            # fashion.
-            with image_load_lock:
+            try:
+                hf = renpy.loader.load(highres_filename)
+
+                if ext.lower() in safe_formats:
+                    surf = pygame.image.load(hf, renpy.exports.fsencode(highres_filename))
+                else:
+
+                    # Non-whitelisted formats may not be able to load in a reentrant
+                    # fashion.
+                    with image_load_lock:
+                        surf = pygame.image.load(hf, renpy.exports.fsencode(highres_filename))
+
+                hidpi_factor = factor
+                break
+            except:
+                pass
+
+    # No hidpi textures
+    if surf is None:
+        try:
+
+            if ext.lower() in safe_formats:
                 surf = pygame.image.load(f, renpy.exports.fsencode(filename))
+            else:
 
-    except Exception as e:
-        raise Exception("Could not load image {!r}: {!r}".format(filename, e))
+                # Non-whitelisted formats may not be able to load in a reentrant
+                # fashion.
+                with image_load_lock:
+                    surf = pygame.image.load(f, renpy.exports.fsencode(filename))
+
+        except Exception as e:
+            raise Exception("Could not load image {!r}: {!r}".format(filename, e))
 
     rv = copy_surface_unscaled(surf)
+
+    if hidpi_factor > 1:
+        return HighDpiSurfaceProxy(rv, hidpi_factor)
+
     return rv
 
 load_image_unscaled = load_image

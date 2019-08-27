@@ -906,6 +906,15 @@ say_attributes_use_side_image = True
 # Does the menu statement show a window by itself, when there is no caption?
 menu_showed_window = False
 
+# If true, Ren'Py searches for images suffixed with '@nx' where 'n' is a
+# virtual scaling factor used for presenting the image with a higher DPI.
+# The factors searched are listed in `config.hidpi_factors`.
+hidpi_textures = False
+
+# When `config.hidpi_textures` is true, the first matching factor in this list
+# is loaded in place of the base texture.
+hidpi_factors = [ 4, 3, 2 ]
+
 del os
 del collections
 

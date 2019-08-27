@@ -25,6 +25,7 @@ from gldraw cimport Environ
 cdef class TextureCore:
     cdef public int width
     cdef public int height
+    cdef public int hidpi_factor
     cdef public int generation
     cdef public unsigned int number
     cdef int format
@@ -55,6 +56,7 @@ cdef class TextureGrid:
 
     cdef public int width
     cdef public int height
+    cdef public int hidpi_factor
     cdef list rows
     cdef list columns
     cdef list tiles # list of lists.

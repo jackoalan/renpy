@@ -41,7 +41,7 @@ import collections
 import renpy
 
 # The maximum size of a texture.
-MAX_SIZE = 2048
+MAX_SIZE = 4096
 
 # Possible sizes for a texture, ordered from largest to smallest.
 # (Now set in test_texture_sizes.)
@@ -131,7 +131,7 @@ def test_texture_sizes(Environ environ, draw):
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &hw_max_size)
 
     renpy.display.log.write("- Hardware max texture size: %d", hw_max_size)
-    hw_max_size = min(2048, hw_max_size)
+    hw_max_size = min(4096, hw_max_size)
 
     SIZES = [ ]
 
@@ -243,8 +243,8 @@ def test_texture_sizes(Environ environ, draw):
     # Clean up.
     environ.set_texture(0, NULL)
 
-    if MAX_SIZE > 2048:
-        MAX_SIZE = 2048
+    if MAX_SIZE > 4096:
+        MAX_SIZE = 4096
 
     if not SIZES:
         renpy.display.log.write("Textures are not rendering properly.")
@@ -258,11 +258,14 @@ cdef class TextureCore:
     This object stores information about an OpenGL texture.
     """
 
-    def __init__(TextureCore self, int width, int height):
+    def __init__(TextureCore self, int width, int height, int hidpi_factor):
 
         # The width and height of this texture.
         self.width = width
         self.height = height
+
+        # The scale factor of this texture.
+        self.hidpi_factor = hidpi_factor
 
         # The number of the OpenGL texture this texture object
         # represents.
@@ -415,8 +418,8 @@ cdef class TextureCore:
 
             # Finally, load in the default math.
             self.xadd = self.yadd = 0
-            self.xmul = 1.0 / self.width
-            self.ymul = 1.0 / self.height
+            self.xmul = 1.0 / self.width * self.hidpi_factor
+            self.ymul = 1.0 / self.height * self.hidpi_factor
 
             # We don't need to be loaded anymore.
             self.premult = None
@@ -541,14 +544,14 @@ total_texture_size = 0
 
 # This allocates a texture, either from the free list, or by asking
 # gl.
-def alloc_texture(width, height):
+def alloc_texture(width, height, hidpi_factor = 1):
     """
     Allocate a texture, either from the freelist or by asking GL. The
     returned texture has a reference count of 1.
     """
 
     if renpy.game.preferences.gl_npot:
-        rv = Texture(width, height)
+        rv = Texture(width, height, hidpi_factor)
         rv.free_list = npot_free_textures
         rv.generation = generation
         return rv
@@ -558,7 +561,7 @@ def alloc_texture(width, height):
     if l:
         rv = l.pop()
     else:
-        rv = Texture(width, height)
+        rv = Texture(width, height, hidpi_factor)
 
     rv.free_list = l
 
@@ -675,11 +678,15 @@ cdef class TextureGrid(object):
     area.
     """
 
-    def __init__(self, width, height): #@DuplicatedSignature
+    def __init__(self, width, height, hidpi_factor = 1): #@DuplicatedSignature
 
         # The width and height of this TextureGrid
         self.width = width
         self.height = height
+
+        # The scale factor that the width and height should be
+        # divided by for transformations.
+        self.hidpi_factor = hidpi_factor
 
         # For each row of tiles, a tuple giving:
         # - The y offset within the texture.
@@ -767,7 +774,7 @@ old_gl_npot = None
 # This is a cache from (width, size) to the results of compute_tiling.
 tiling_cache = { }
 
-def compute_tiling(width, max_size, min_fill_factor):
+def compute_tiling(width, max_size, min_fill_factor, hidpi_factor = 1):
     """
     This computes a tiling for an image with the given width (or
     height). It takes a width as an argument, and returns two lists.
@@ -844,7 +851,7 @@ def compute_tiling(width, max_size, min_fill_factor):
         row_size = min(width, size - left_border - right_border)
 
         #Add to the results.
-        row.append((left_border, row_size, row_index))
+        row.append((left_border, row_size // hidpi_factor, row_index))
         tiles.append((x - left_border, row_size + left_border + right_border, size))
 
         # Update the counters.
@@ -862,6 +869,12 @@ def texture_grid_from_surface(surf, transient):
     This takes a Surface and turns it into a TextureGrid.
     """
 
+    hidpi_factor = 1
+
+    if isinstance(surf, renpy.display.pgrender.HighDpiSurfaceProxy):
+        hidpi_factor = surf.hidpi_factor
+        surf = surf.surface
+
     if renpy.game.preferences.gl_npot:
         max_size = SIZES[0]
         fill_factor = 0.5
@@ -875,10 +888,10 @@ def texture_grid_from_surface(surf, transient):
 
     width, height = surf.get_size()
 
-    rv = TextureGrid(width, height)
+    rv = TextureGrid(width, height, hidpi_factor)
 
-    rv.columns, texcolumns = compute_tiling(width, max_size, fill_factor)
-    rv.rows, texrows = compute_tiling(height, max_size, fill_factor)
+    rv.columns, texcolumns = compute_tiling(width, max_size, fill_factor, hidpi_factor)
+    rv.rows, texrows = compute_tiling(height, max_size, fill_factor, hidpi_factor)
 
     for rv_row, texrow in zip(rv.rows, texrows):
         border_top, _, border_bottom = rv_row
@@ -892,7 +905,7 @@ def texture_grid_from_surface(surf, transient):
             border_left, _, border_right = rv_col
             x, width, texwidth = texcol
 
-            tex = alloc_texture(texwidth, texheight)
+            tex = alloc_texture(texwidth, texheight, hidpi_factor)
             tex.load_surface(surf, x, y, width, height,
                              border_left, border_top, border_right, border_bottom)
 
